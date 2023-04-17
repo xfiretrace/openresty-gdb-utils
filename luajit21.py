@@ -97,6 +97,8 @@ LJ_VMST_OPT = 5
 LJ_VMST_ASM = 6
 LJ_VMST__MAX = 7
 
+LJ_GCVMASK = ((1 << 47) - 1)
+
 vmstates = ['Interpreted', 'C code (from interpreted Lua code)', \
         'Garbage collector', 'Trace exit handler', \
         'Trace recorder', 'Optimizer', 'Assembler']
@@ -130,8 +132,13 @@ def get_cur_L():
         return mL
     return gcref(G(mL)['cur_L'])['th'].address
 
+
+def gcrefu(r):
+    return (r["gcptr64"])
+
+
 def gcval(o):
-    return gcref(o['gcr'])
+    return (gcrefu(o['gcr'])&LJ_GCVMASK).cast(typ("GCobj*")) 
 
 def tabV(o):
     return gcval(o)['tab'].address
@@ -146,7 +153,7 @@ def cframe_L(cf):
             .cast(typ("GCRef*")).dereference())['th'].address
 
 def frame_ftsz(tv):
-    return tv['fr']['tp']['ftsz']
+    return tv['ftsz']
 
 def frame_type(f):
     return (frame_ftsz(f) & FRAME_TYPE)
@@ -173,8 +180,8 @@ def gcrefp(r, t):
     #((t *)(void *)(uintptr_t)(r).gcptr32)
     return r['gcptr64'].cast(typ(t + "*"))
 
-def frame_gc(frame):
-    return gcref(frame['fr']['func'])
+def frame_gc(f):
+    return gcval(f-1)
 
 def obj2gco(v):
     return v.cast(typ("GCobj*"))
@@ -183,10 +190,10 @@ def mref(r, t):
     return r['ptr64'].cast(typ("uintptr_t")).cast(typ(t + "*"))
 
 def frame_pc(f):
-    return mref(f['fr']['tp']['pcr'], "BCIns")
+    return mref(frame_ftsz(f), "BCIns")
 
 def frame_contpc(f):
-    return frame_pc(f - 1)
+    return frame_pc(f - 2)
 
 def bc_a(i):
     return newval("BCReg", (i >> 8) & 0xff)
