@@ -136,7 +136,7 @@ def get_cur_L():
 def gcrefu(r):
     return (r["gcptr64"])
 
-
+##done
 def gcval(o):
     return (gcrefu(o['gcr'])&LJ_GCVMASK).cast(typ("GCobj*")) 
 
@@ -152,18 +152,21 @@ def cframe_L(cf):
     return gcref((cf.cast(typ("char*")) + CFRAME_OFS_L) \
             .cast(typ("GCRef*")).dereference())['th'].address
 
+## done
 def frame_ftsz(tv):
     return tv['ftsz']
 
 def frame_type(f):
     return (frame_ftsz(f) & FRAME_TYPE)
 
+## done
 def frame_islua(f):
     return frame_type(f) == FRAME_LUA
 
 def frame_typep(f):
     return (frame_ftsz(f) & FRAME_TYPEP)
 
+## done
 def frame_isvarg(f):
     return frame_typep(f) == FRAME_VARG
 
@@ -173,24 +176,29 @@ def frame_iscont(f):
 def sizeof(typ):
     return gdb.parse_and_eval("sizeof(" + typ + ")")
 
+## done
 def gcref(r):
-    return r['gcptr64'].cast(typ("uintptr_t")).cast(typ("GCobj*"))
+    return r['gcptr64'].cast(typ("GCobj*"))
 
 def gcrefp(r, t):
     #((t *)(void *)(uintptr_t)(r).gcptr32)
     return r['gcptr64'].cast(typ(t + "*"))
 
+##done
 def frame_gc(f):
     return gcval(f-1)
 
+##done
 def obj2gco(v):
     return v.cast(typ("GCobj*"))
 
+## done
 def mref(r, t):
-    return r['ptr64'].cast(typ("uintptr_t")).cast(typ(t + "*"))
+    return r['ptr64'].cast(typ(t + "*"))
 
+## done
 def frame_pc(f):
-    return mref(frame_ftsz(f), "BCIns")
+    return frame_ftsz(f).cast(typ("BCIns*"))
 
 def frame_contpc(f):
     return frame_pc(f - 2)
@@ -198,12 +206,14 @@ def frame_contpc(f):
 def bc_a(i):
     return newval("BCReg", (i >> 8) & 0xff)
 
+## done
 def frame_prevl(f):
-    return f - (1 + bc_a(frame_pc(f)[-1]))
+    return f - (1 + 1 + bc_a(frame_pc(f)[-1]))
 
 def frame_sized(f):
     return (frame_ftsz(f) & ~FRAME_TYPEP)
 
+## done
 def frame_prevd(f):
     #print "f = %x, sized = %x" % (ptr2int(f.cast(typ("char*"))), frame_sized(f))
     return (f.cast(typ("char*")) - frame_sized(f)).cast(typ("TValue*"))
@@ -213,10 +223,12 @@ def frame_prev(f):
         return frame_prevl(f)
     else:
         return frame_prevd(f)
-
+## done
 def tvref(r):
     return mref(r, "TValue")
 
+
+## done
 def lj_debug_frame(L, base, level, bot):
     frame = base - 1
     nextframe = frame
@@ -238,28 +250,36 @@ def lj_debug_frame(L, base, level, bot):
             frame = frame_prevd(frame)
     return (null(), level)
 
+##done
 def frame_func(f):
     return frame_gc(f)['fn'].address
 
+##done
 def isluafunc(fn):
     return fn['c']['ffid'] == FF_LUA
 
+##done
 def isffunc(fn):
     return fn['c']['ffid'] > FF_C
 
-def funcproto(fn):
-    return (mref(fn['l']['pc'], "char") - typ("GCproto").sizeof) \
-            .cast(typ("GCproto*"))
 
+##done
+def funcproto(fn):
+    return (mref(fn['l']['pc'], "char") - typ("GCproto").sizeof).cast(typ("GCproto*"))
+
+##done
 def proto_bc(pt):
     return (pt.cast(typ("char*")) + typ("GCproto").sizeof).cast(typ("BCIns*"))
 
+##done
 def proto_bcpos(pt, pc):
     return (pc - proto_bc(pt)).cast(typ("BCPos"))
 
+##done
 def proto_lineinfo(pt):
     return mref(pt['lineinfo'], "void")
 
+##done
 def lj_debug_line(pt, pc):
     lineinfo = proto_lineinfo(pt)
     if pc <= pt['sizebc'] and lineinfo:
@@ -278,6 +298,7 @@ def lj_debug_line(pt, pc):
     #print "Nothing: ", str(lineinfo)
     return 0
 
+##done
 def debug_framepc(L, T, fn, pt, nextframe):
     if not isluafunc(fn):
         return NO_BCPOS
@@ -291,6 +312,7 @@ def debug_framepc(L, T, fn, pt, nextframe):
     else:
         if frame_islua(nextframe):
             #print("frame pc")
+            out("frame pc\n")            
             ins = frame_pc(nextframe)
         elif frame_iscont(nextframe):
             #print("frame contpc")
@@ -298,37 +320,44 @@ def debug_framepc(L, T, fn, pt, nextframe):
         else:
             warn("Lua function below errfunc/gc/hook not supported yet")
             return NO_BCPOS
+    out("debug_framepc ins%#x\n" % ptr2int(ins))         
     pos = proto_bcpos(pt, ins) - 1
     if pos > pt['sizebc']:
-        T = ((ins - 1).cast(typ("char*")) - \
-                typ("GCtrace")['startins'].bitpos / 8).cast(typ("GCtrace*"))
-        #print("T: %d" % int(T['traceno']))
+        # if not T:
+        # out("(GCtrace*)0x%x\n" % ptr2int(T))
+        T = ((ins - 1).cast(typ("char*")) - int(typ("GCtrace")['startins'].bitpos / 8)).cast(typ("GCtrace*"))
+        out(" debug_framepc T (GCtrace*)0x%x\n" % ptr2int(T))
         try:
             pos = proto_bcpos(pt, mref(T['startpc'], "BCIns"))
         except:
             return NO_BCPOS
     return pos
 
+##done
 def debug_frameline(L, T, fn, pt, nextframe):
     pc = debug_framepc(L, T, fn, pt, nextframe)
+    # out("debug_frameline debug_framepc %#x\n" % ptr2int(pc))
     if pc != NO_BCPOS:
         pt = funcproto(fn)
         return lj_debug_line(pt, pc)
     #print("pc == %d" % pc)
     return -1
 
+##done
 def strref(r):
     return gcref(r)['str'].address
 
 def tabref(r):
     return gcref(r)['tab'].address
 
+##done
 def proto_chunkname(pt):
     return strref(pt['chunkname'])
-
+##done
 def strdata(s):
     return (s + 1).cast(typ("char*"))
 
+## done
 def G(L):
     return mref(L['glref'], "global_State")
 
@@ -338,9 +367,14 @@ def cframe_raw(cf):
 def proto_varinfo(pt):
     return mref(pt['varinfo'], 'uint8_t')
 
+## done
 def lua_gettop(L):
+
+    # out("L['top'] 0x%x\n" % ptr2int(L['top']))
+    # out("L['base'] 0x%x\n" % ptr2int(L['base']))
     return int(L['top'] - L['base'])
 
+## done
 def stkindex2adr(L, idx):
     """
     Given L and a stack index, returns the corresponding TValue object.
@@ -348,6 +382,7 @@ def stkindex2adr(L, idx):
     """
     if idx > 0:
         o = L['base'] + (idx - 1)
+        # out("stkindex2adr 0x%x\n" % ptr2int(o))
         return o if o <= L['top'] else None
     else:
         # negative index
@@ -381,6 +416,7 @@ builtin_variable_names = [ \
         "(for state)", \
         "(for control)"]
 
+##done
 def debug_varname(pt, pc, slot):
     p = proto_varinfo(pt).cast(typ("char*"))
     if p:
@@ -413,6 +449,7 @@ def debug_varname(pt, pc, slot):
             slot = slot - 1
     return False
 
+## done
 def lj_debug_dumpstack(L, T, depth, base, full):
     global cfunc_cache
 
@@ -422,16 +459,19 @@ def lj_debug_dumpstack(L, T, depth, base, full):
         level = ~depth
         depth = dir = -1
 
-    bot = tvref(L['stack'])
+    bot = tvref(L['stack']) + 1 
     while level != depth:
         #print "checking level: %d" % level
 
         bt = ""
         frame, size = lj_debug_frame(L, base, level, bot)
-
+        # out(" lj_debug_dumpstack size %d\n" % size)
+        # out(" lj_debug_dumpstack frame %#x\n" % ptr2int(frame))
         if frame:
             nextframe = (frame + size) if size else null()
+            # out(" lj_debug_dumpstack nextframe %#x\n" % ptr2int(nextframe))            
             fn = frame_func(frame)
+            out(" frame_func %x\n" % ptr2int(fn))                 
             #print "type(fn) == %s" % fn.type
             if not fn:
                 return
@@ -439,8 +479,9 @@ def lj_debug_dumpstack(L, T, depth, base, full):
             pt = None
 
             if isluafunc(fn):
-                pt = funcproto(fn)
+                pt = funcproto(fn)            
                 line = debug_frameline(L, T, fn, pt, nextframe)
+                # out(" ===   line: %d \n" % line)                   
                 #print("line: %d\n" % line)
                 if line <= 0:
                     #print str(pt.dereference)
@@ -498,17 +539,21 @@ def lj_debug_dumpstack(L, T, depth, base, full):
 
     return bt
 
+## done
 def G2GG(gl):
     #print(type(typ("GG_State")['g'].bitpos))
     diff = gl.cast(typ("char*")) - int(typ("GG_State")['g'].bitpos / 8)
     return diff.cast(typ("GG_State*"))
 
+## done
 def G2J(gl):
     return G2GG(gl)['J'].address
 
+## done
 def traceref(J, n):
     return gcref(J['trace'][n]).cast(typ("GCtrace*"))
 
+## done
 class lbt(gdb.Command):
     """This command dumps out the current Lua-land backtrace in the lua_State specified. Only LuaJIT 2.1 is supported.
 Usage: lbt [L]
@@ -550,8 +595,10 @@ Usage: lbt [L]
 
         vmstate = int(g['vmstate'])
         #print "vmstate = %d" % vmstate
-
-        if vmstate >= 0:
+        out("current VM state:%d  %s\n" % (vmstate , vmstates[vmstate]))
+        base = L['base']
+        # out("current  L['base']%#x\n" % ptr2int(base))
+        if (vmstate >= 0) or (vmstate == ~LJ_VMST_EXIT ):
             #print "compiled code"
             traceno = vmstate
             J = G2J(g)
@@ -565,41 +612,25 @@ Usage: lbt [L]
 
             if not base:
                 raise gdb.GdbError("jit base is NULL (trace #%d)" % int(T['traceno']))
+            out("current  L['jit_base']%#x\n" % ptr2int(base))
             bt = lj_debug_dumpstack(L, T, 30, base, full)
-
+             
         else:
-            if vmstate == ~LJ_VMST_EXIT:
-                base = tvref(g['jit_base'])
-                if base:
-                    bt = lj_debug_dumpstack(L, 0, 30, base, full)
-
-                else:
-                    base = L['base']
-                    bt = lj_debug_dumpstack(L, 0, 30, base, full)
-
-            else:
-                if vmstate == ~LJ_VMST_INTERP and not L['cframe']:
-                    out("No Lua code running.\n")
-                    return
-
-                if vmstate == ~LJ_VMST_INTERP or \
-                       vmstate == ~LJ_VMST_C or \
-                       vmstate == ~LJ_VMST_GC:
-                    if vmstate == ~LJ_VMST_INTERP:
-                        #out("Fetching edx...")
-                        base = gdb.parse_and_eval("$edx").cast(typ("TValue*"))
-
-                    else:
-                        base = L['base']
-
-                    bt = lj_debug_dumpstack(L, 0, 30, base, full)
-
-                else:
-                    out("No Lua code running.\n")
-                    return
-
+            if vmstate == ~LJ_VMST_INTERP and not L['cframe']:
+                out("No Lua code running.\n")
+                return
+            if vmstate == ~LJ_VMST_INTERP:
+                base = gdb.parse_and_eval("$rdx").cast(typ("TValue*")) 
+                out("current $rdx  base %#x\n" % ptr2int(base))                     
+            if vmstate == ~LJ_VMST_C or vmstate == ~LJ_VMST_GC: 
+                base = L['base']
+                out("current  base %#x\n" % ptr2int(base))                
+            bt = lj_debug_dumpstack(L, 0, 30, base, full)          
+                
 lbt()
 
+
+## done
 class lvmst(gdb.Command):
     """This command prints out the current LuaJIT VM state in the lua_State specified.
 Usage: lvmst [L]"""
@@ -623,6 +654,10 @@ Usage: lvmst [L]"""
 
         g = G(L)
 
+        out("Global_State 0x%x\n" % ptr2int(g))
+        out("Current_L (lua_State*)0x%x\n" % ptr2int(L))
+        out("Global_L (lua_State*)0x%x\n" % ptr2int(get_global_L()))
+
         vmstate = int(g['vmstate'])
         if vmstate >= 0:
             out("Compiled Lua code (trace #%d)\n" % vmstate)
@@ -643,6 +678,8 @@ Usage: lvmst [L]"""
 
 lvmst()
 
+
+## done
 class lmainL(gdb.Command):
     """This command prints out the main Lua thread's state
 Usage: lmainL"""
@@ -660,6 +697,8 @@ Usage: lmainL"""
 
 lmainL()
 
+
+## done
 class lcurL(gdb.Command):
     """This command prints out the current running Lua thread's state
 Usage: lcurL"""
@@ -677,6 +716,8 @@ Usage: lcurL"""
 
 lcurL()
 
+
+## done
 class lglobtab(gdb.Command):
     """This command prints out the global environment table.
 Usage: lglobtab [L]"""
@@ -735,6 +776,7 @@ def tvisint(o):
 def strV(o):
     return gcval(o)['str'].address
 
+##done
 def lstr2str(gcs):
     kstr = strdata(gcs)
     if not kstr:
@@ -971,6 +1013,7 @@ def dump_udata(ud, data=False):
         out("\"\n")
 
 def dump_tvalue(o, deep=False):
+    out("dump_tvalue %#x\n" % ptr2int(o))
     if tvisudata(o):
         dump_udata(udataV(o))
 
@@ -1037,6 +1080,7 @@ def dump_tvalue(o, deep=False):
     else:
         out("\t\t%s: (TValue*)%#x\n" % (ltype(o), ptr2int(o)))
 
+##done
 class lval(gdb.Command):
     """This command prints out the content of a TValue* pointer
 Usage: lval tv"""
@@ -1066,7 +1110,7 @@ Usage: lval tv"""
         if typstr == "GCstr *":
             out("GCstr: \"%s\" (len %d)\n" % (lstr2str(o), o['len']))
             return
-
+        ##done
         if typstr == "GCproto *":
             name = proto_chunkname(o)
             if name:
@@ -1076,7 +1120,7 @@ Usage: lval tv"""
             end = begin + o['sizebc']
             out("bytecode range: %#x %#x\n" % (ptr2int(begin), ptr2int(end)))
             return
-
+        ##done
         if typstr == "GCfunc *":
             out("proto first line: %s\n" % fmtfunc(o))
             if isluafunc(o):
@@ -1104,6 +1148,8 @@ Usage: lval tv"""
 
 lval()
 
+
+##done
 class lproto(gdb.Command):
     """This command prints out all the Lua prototypes (the GCproto* pointers) filtered by the file name and file line number where the function is defined.
 Usage: lproto file lineno"""
@@ -1113,13 +1159,19 @@ Usage: lproto file lineno"""
 
     def invoke (self, args, from_tty):
         argv = gdb.string_to_argv(args)
-        if len(argv) != 2:
-            raise gdb.GdbError("Usage: lproto file lineno")
+        if len(argv) > 2:
+            raise gdb.GdbError("Usage: lproto [full] [file lineno]")
 
         L = get_cur_L()
 
-        fname = str(argv[0])
-        lineno = int(argv[1])
+        lineno = "a"
+        fname = ""
+        full = False
+        if len(argv) == 1 and argv[0] == "full": 
+            full = True       
+        else:
+            fname = str(argv[0])
+            lineno = int(argv[1])
 
         #print "g: ", hex(int(L['glref']['ptr32']))
 
@@ -1135,23 +1187,33 @@ Usage: lproto file lineno"""
                 break
             if o['gch']['gct'] == ~LJ_TPROTO():
                 pt = o['pt'].address
+                if full:
+                    name = proto_chunkname(pt)
+                    path = lstr2str(name)                   
+                    out("Found Lua proto (GCproto*)0x%x at %s:%d\n" \
+                                    % (ptr2int(pt), path, pt['firstline']))         
+
                 if pt['firstline'] == lineno:
                     name = proto_chunkname(pt)
                     if name:
-                        path = lstr2str(name)
+                        path = lstr2str(name)                      
                         if fname in path:
                             out("Found Lua proto (GCproto*)0x%x at %s:%d\n" \
                                     % (ptr2int(pt), path, lineno))
+                            
             p = o['gch']['nextgc'].address
 
 lproto()
 
+## done
 def uvval(uv_):
     return mref(uv_['v'], 'TValue')
 
+## done
 def proto_uvinfo(pt):
     return mref(pt['uvinfo'], 'uint8_t')
 
+## done
 def lj_debug_uvname(pt, idx):
     idx = newval("uint32_t", idx)
     p = proto_uvinfo(pt)
@@ -1169,6 +1231,7 @@ def lj_debug_uvname(pt, idx):
                 break
     return p.cast(typ("char*")).string('iso-8859-6', 'ignore')
 
+## done
 def dump_upvalues(fn, pt):
     uvptr = fn['l']['uvptr']
     sizeuv = int(pt['sizeuv'])
@@ -1180,7 +1243,7 @@ def dump_upvalues(fn, pt):
         out("upvalue \"%s\": value=(TValue*)0x%x value_type=%s closed=%d\n" % \
                 (name, ptr2int(tvp), ltype(tvp), int(uv['closed'])))
 
-def find_lfunc_by_src_loc(fname, lineno):
+def find_lfunc_by_src_loc(fname, lineno, verbose):
     res = []
 
     L = get_cur_L()
@@ -1201,11 +1264,16 @@ def find_lfunc_by_src_loc(fname, lineno):
             fn = o['fn'].address
             if isluafunc(fn):
                 pt = funcproto(fn)
-                if pt and pt['firstline'] == lineno:
-                    #print "proto: 0x%x\n" % ptr2int(pt)
+                if verbose:
                     name = proto_chunkname(pt)
-                    #print "name: 0x%x\n" % ptr2int(name)
-                    #print "len: %d\n" % int(name['len'])
+                    path = lstr2str(name)                   
+                    out("Found Lua function (GCfunc*)0x%x at %s:%d\n" \
+                                    % (ptr2int(fn), path, pt['firstline']))                 
+                if pt and pt['firstline'] == lineno:
+                    # print "proto: 0x%x\n" % ptr2int(pt)
+                    name = proto_chunkname(pt)
+                    # print "name: 0x%x\n" % ptr2int(name)
+                    # print "len: %d\n" % int(name['len'])
                     if name:
                         path = lstr2str(name)
                         if fname in path:
@@ -1213,6 +1281,8 @@ def find_lfunc_by_src_loc(fname, lineno):
         p = o['gch']['nextgc'].address
     return res
 
+
+## done
 class lfunc(gdb.Command):
     """This command prints out all the Lua functions (the GCfunc* pointers) filtered by the file name and file line number where the function is defined.
 Usage: lfunc file lineno"""
@@ -1222,13 +1292,19 @@ Usage: lfunc file lineno"""
 
     def invoke (self, args, from_tty):
         argv = gdb.string_to_argv(args)
-        if len(argv) != 2:
-            raise gdb.GdbError("Usage: lfunc file lineno")
+        if len(argv) > 2:
+            raise gdb.GdbError("Usage: lfunc  [full] [file lineno]")
+        
+        lineno = "a"
+        fname = ""
+        verbose = False
+        if len(argv) == 1 and argv[0] == "full": 
+            verbose = True   
+        else:      
+            fname = str(argv[0])
+            lineno = int(argv[1])
 
-        fname = str(argv[0])
-        lineno = int(argv[1])
-
-        res = find_lfunc_by_src_loc(fname, lineno)
+        res = find_lfunc_by_src_loc(fname, lineno, verbose)
         for hit in res:
             fn = hit[0]
             path = hit[1]
@@ -1237,6 +1313,7 @@ Usage: lfunc file lineno"""
 
 lfunc()
 
+## done
 class luv(gdb.Command):
     """This command prints out all the upvalues in the GCfunc* pointer specified.
 Usage: luv fn"""
@@ -1266,6 +1343,7 @@ def threadV(o):
     # &gcval(o)->th
     return gcval(o)['th'].address
 
+## done
 def tabref(r):
     return gcref(r)['tab'].address
 
@@ -1333,6 +1411,7 @@ Usage: lg [L]"""
 
 lg()
 
+## done
 def trace_findfree(J):
     freetrace = 1
     sizetrace = int(J['sizetrace'])
@@ -1346,6 +1425,7 @@ def trace_findfree(J):
 
     return freetrace
 
+## done
 class ltrace(gdb.Command):
     """This command prints out details for the trace specified by the trace number
 Usage: ltrace [traceno]"""
@@ -1400,6 +1480,7 @@ Usage: ltrace [traceno]"""
 
 ltrace()
 
+##done
 def bc_op(i):
     return (i & 0xff).cast(typ("BCOp"))
 
@@ -1407,36 +1488,8 @@ def bc_isret(op):
     op = int(op)
     return (op == BC_RETM or op == BC_RET or op == BC_RET0 or op == BC_RET1)
 
+## done
 def locate_pc(pc, verbose):
-    """
-    L = get_cur_L()
-    g = G(L)
-    p = g['gc']['root'].address
-    while p:
-        o = gcref(p)
-        if not o:
-            break
-        if o['gch']['gct'] == ~LJ_TPROTO():
-            pt = o['pt'].address
-            pos = proto_bcpos(pt, pc) - 1
-            if pos <= pt['sizebc'] and pos >= 0:
-                out("proto: (GCproto*)0x%x\n" % ptr2int(pt))
-                name = proto_chunkname(pt)
-                if name:
-                    path = lstr2str(name)
-                    line = lj_debug_line(pt, pos)
-                    out("BC pos: %d\n" % int(pos))
-                    out("source line: %s:%d\n" % (path, line))
-                    out("proto first line: %d\n" % int(pt['firstline']))
-                    return
-
-        p = o['gch']['nextgc'].address
-
-    #print("isret: %d\n" % int(bc_isret(bc_op(pc[-1]))))
-
-    out("no direct match. trying harder...\n")
-    """
-
     pt = pc2proto(pc)
     if not pt:
         out("No matching proto found")
@@ -1444,8 +1497,10 @@ def locate_pc(pc, verbose):
 
     if verbose:
         out("proto: (GCproto*)0x%x\n" % ptr2int(pt))
+        out("-- BEGIN BYTECODE -- %s\n" % pc2loc(pt, pc))
 
-    pos = proto_bcpos(pt, pc) - 1
+    
+    pos = proto_bcpos(pt, pc)  - 1
     name = proto_chunkname(pt)
     if name:
         path = lstr2str(name)
@@ -1457,6 +1512,7 @@ def locate_pc(pc, verbose):
             out("proto first line: %d\n" % int(pt['firstline']))
         return
 
+## done
 class lpc(gdb.Command):
     """This command prints out the source line position for the current pc.
 Usage: lpc pc"""
@@ -1467,12 +1523,15 @@ Usage: lpc pc"""
     def invoke (self, args, from_tty):
         argv = gdb.string_to_argv(args)
 
-        if len(argv) != 1:
+        if len(argv) > 1:
             raise gdb.GdbError("usage: lpc pc")
 
-        pc = gdbutils.parse_ptr(argv[0], "BCIns*")
+        if len(argv) == 0:
+            pc = gdb.parse_and_eval("$rbx").cast(typ("BCIns*")) 
+        else:            
+            pc = gdbutils.parse_ptr(argv[0], "BCIns*")
 
-        #out("pc type: %s\n" % str(pc.type))
+        out("pc type: %s\n" % str(pc.type))
 
         locate_pc(pc, True)
 
@@ -2115,10 +2174,11 @@ ffnames = [
 ]
 
 def fmtfunc(fn):
-    if isluafunc(fn):
+    if isluafunc(fn):     
         pt = funcproto(fn)
         line = int(pt['firstline'])
         name = proto_chunkname(pt)
+        out("proto_chunkname  %s \n " % name )         
         if not name:
             return ""
         path = lstr2str(name)
@@ -2309,6 +2369,7 @@ def dumpcallfunc(T, ins):
         out("%04d (" % ins)
     return ctype
 
+##done
 def pc2loc(pt, pc):
     line = int(lj_debug_line(pt, proto_bcpos(pt, pc) if pc else 0))
     name = proto_chunkname(pt)
@@ -2754,11 +2815,11 @@ class lgcpath(lgcstat):
 
         # step 2: DFS main thread
         self.path_root = 2
-        thr = gcref(g['mainthref'])['th'].address
-        self.dfs(thr, g)
+        self.dfs(gcref(g['mainthref']), g)
 
         # step 3: DFS env
         self.path_root = 3
+        thr = gcref(g['mainthref'])['th'].address        
         self.dfs(gcref(thr['env']), g)
 
         # step 4: dfs GCROOTs
@@ -3142,6 +3203,7 @@ lj_bc_mode = None
 
 bcnames = "ISLT  ISGE  ISLE  ISGT  ISEQV ISNEV ISEQS ISNES ISEQN ISNEN ISEQP ISNEP ISTC  ISFC  IST   ISF   ISTYPEISNUM MOV   NOT   UNM   LEN   ADDVN SUBVN MULVN DIVVN MODVN ADDNV SUBNV MULNV DIVNV MODNV ADDVV SUBVV MULVV DIVVV MODVV POW   CAT   KSTR  KCDATAKSHORTKNUM  KPRI  KNIL  UGET  USETV USETS USETN USETP UCLO  FNEW  TNEW  TDUP  GGET  GSET  TGETV TGETS TGETB TGETR TSETV TSETS TSETB TSETM TSETR CALLM CALL  CALLMTCALLT ITERC ITERN VARG  ISNEXTRETM  RET   RET0  RET1  FORI  JFORI FORL  IFORL JFORL ITERL IITERLJITERLLOOP  ILOOP JLOOP JMP   FUNCF IFUNCFJFUNCFFUNCV IFUNCVJFUNCVFUNCC FUNCCW"
 
+##done
 def funcbc(pc):
     ins = pc[0]
     op = bc_op(ins)
@@ -3157,19 +3219,23 @@ def funcbc(pc):
 def ctlsub(s):
     return s.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
 
+##done
 def pc2proto(pc):
     i = 0
     while pc and i < 1000000:
         ins = pc[-i]
+        # out("ins =====  %s   pc[-i] x%#x" % (ins, ptr2int(pc[-i].address)))
         #print("ins: %d" % int(ins))
         oidx = int(6 * (ins & 0xff))
         op = bcnames[oidx:oidx+6]
+        # out("op =====  %s \n" % op)
         #print("op: %s" % op)
         if op == "FUNCF " or op == "FUNCV " or op == "JFUNCF" \
            or op == "JFUNCV" or op == "IFUNCF" or op == "IFUNCV":
-            return ((pc - i).cast(typ("char*")) - typ("GCproto").sizeof).cast(typ("GCproto*"))
+                    return ((pc - i).cast(typ("char*")) - typ("GCproto").sizeof).cast(typ("GCproto*"))
         i += 1
     return None
+
 
 def proto_kgc(pt, idx):
     return gcref(mref(pt['k'], "GCRef")[idx])
@@ -3177,6 +3243,7 @@ def proto_kgc(pt, idx):
 def proto_knumtv(pt, idx):
     return gcval(mref(pt['k'], "TValue") + idx)
 
+##done
 def funck(pt, idx):
     #print "idx = %d, sizekn=%d, sizekgc=%d" % (idx, pt['sizekn'], \
             #pt['sizekgc'])
@@ -3188,11 +3255,13 @@ def funck(pt, idx):
             return proto_kgc(pt, idx)
     return None
 
+##done
 def funcuvname(pt, idx):
     if idx < pt['sizeuv']:
         return lj_debug_uvname(pt, idx)
     return None
 
+##done
 def bcline(func, pc, prefix):
     ins, m = funcbc(pc)
     if not ins:
@@ -3254,6 +3323,7 @@ def bcline(func, pc, prefix):
         d = d - 65536
     return "%s%3d\n" % (s, d)
 
+## done
 class lbc(gdb.Command):
     """This command prints out the LuaJIT bytecode in the PC range specified by the user.
 Usage: lbc <from> <to>"""
@@ -3338,15 +3408,26 @@ Usage: lthreadpc <L>"""
     def invoke (self, args, from_tty):
         argv = gdb.string_to_argv(args)
 
-        if len(argv) != 1:
+        if len(argv) > 1:
             raise gdb.GdbError("usage: lthreadpc <L>")
 
-        L = gdb.parse_and_eval(argv[0]).cast(typ("lua_State*"))
+        if len(argv) == 1:
+            L = gdbutils.parse_ptr(argv[0], "lua_State*")
+            if not L or str(L) == "void":
+                raise gdb.GdbError("L empty")
+        else:
+            L = get_cur_L()
 
         if L['cframe'] == null() and L['status'] <= LUA_YIELD:
-            pc = (L['base'].cast(typ("char*")) - 4).cast(typ("uint32_t*")).dereference()
-            out("next PC: (BCIns*)%#x\n" % pc)
-            locate_pc(pc.cast(typ("BCIns*")), False)
+            out("L['base'] =====  %s \n" % L['base'])
+            f = (L['base'] - 1)
+            out("f =====  %s \n" % f)
+            pc = frame_pc(f)
+            out("next PC: (BCIns*)%#x\n" % pc)            
+            # pc = (L['base'] - 1).cast(typ("int64_t*")).cast(typ("BCIns*"))#.dereference()
+            # pc = (L['base'].cast(typ("char*")) - 4).cast(typ("uint32_t*")).dereference()
+            out("next PC: (BCIns*)%#x\n" % ptr2int(pc))
+            locate_pc(pc, True)
         else:
             raise gdb.GdbError("Lua thread in bad state")
 
@@ -3450,6 +3531,7 @@ class rawheader(gdb.Command):
 
 rawheader()
 
+## done
 class ltracebymcode(gdb.Command):
     """This command prints out the trace by an included machine code address.
 Usage: ltracebymcode [addr]"""
@@ -3504,15 +3586,35 @@ FuncEntryMatchAll = False
 
 FuncEntryBPs = []
 
+
+#   /* -- Calls and vararg handling ----------------------------------------- 
+
+#.define BASE,		rdx	
+#.define RA,		rcx
+#   case BC_CALL: case BC_CALLM:
+#     |  ins_A_C	// RA = base, (RB = nresults+1,) RC = nargs+1 | extra_nargs
+#     if (op == BC_CALLM) {
+#       |  add NARGS:RDd, MULTRES
+#     }
+#     |  mov LFUNC:RB, [BASE+RA*8]
+#     |  checkfunc LFUNC:RB, ->vmeta_call_ra
+#     |  lea BASE, [BASE+RA*8+16]
+#     |  ins_call
+#     break;
+
+# -- Calls and vararg handling --------------------------------------*/
+## done
 class BCCallMBP (gdb.Breakpoint):
     def __init__ (self):
         super (BCCallMBP, self).__init__("lj_BC_CALLM")
 
     def stop (self):
-        RA = gdb.parse_and_eval("$ecx")
-        BASE = gdb.parse_and_eval("$edx").cast(typ("TValue*"))
+        RA = gdb.parse_and_eval("$rcx")
+        BASE = gdb.parse_and_eval("$rdx").cast(typ("TValue*"))
         fntv = BASE[RA]
-
+        # out("BCCallMBP fn  (BASE*)%#x\n" % ptr2int(BASE))
+        # out("BCCallMBP fn  (RA*)%#x\n" % ptr2int(RA))
+        # out("BCCallMBP fn  (fntv*)%#x\n" % ptr2int(fntv))
         hit = False
         global FuncEntryMatchAll
         if FuncEntryMatchAll:
@@ -3521,17 +3623,19 @@ class BCCallMBP (gdb.Breakpoint):
         else:
             global FuncEntryTargets
             fn = gcval(fntv)['fn'].address
+            out("BCCallMBP fn  (GCfunc*)%#x\n" % ptr2int(fn))
+            gdb.execute("lval (GCfunc*)0x%x" % ptr2int(fn))                
             if ptr2int(fn) in FuncEntryTargets:
                 hit = True
 
         if not hit:
             return False
 
-        MULTRES = int(gdb.parse_and_eval("$rsp").cast(typ("uint32_t*"))[1])
-        #out("multres: %d" % MULTRES)
+        MULTRES = int(gdb.parse_and_eval("$rsp").cast(typ("uint32_t*"))[0])
+        out("multres: %d \n" % MULTRES)
         out("Entry breakpoint hit at\n")
         dump_tvalue(fntv)
-        pc = gdb.parse_and_eval("$ebx").cast(typ("BCIns*")) - 1
+        pc = gdb.parse_and_eval("$rbx").cast(typ("BCIns*")) - 1
         locate_pc(pc, False)
         RC = gdb.parse_and_eval("$al") + MULTRES
         RC -= 1
@@ -3542,20 +3646,28 @@ class BCCallMBP (gdb.Breakpoint):
         else:
             out("Taking %d arguments:\n" % RC)
             for i in xrange(0, RC):
+                # out("Taking arguments addr 0x%x :\n"  % BASE[RA + 1 + i].address)                
                 dump_tvalue(BASE[RA + 1 + i])
 
         return True
+
 
 class BCCallBP (gdb.Breakpoint):
     def __init__ (self):
         super (BCCallBP, self).__init__("lj_BC_CALL")
 
     def stop (self):
-        RA = gdb.parse_and_eval("$ecx")
-        BASE = gdb.parse_and_eval("$edx").cast(typ("TValue*"))
-        fntv = BASE[RA]
 
+        RA = gdb.parse_and_eval("$rcx")
+        BASE = gdb.parse_and_eval("$rdx").cast(typ("TValue*"))
+        fntv = BASE[RA]
+        out("BCCallBP fn  (BASE*)%#x\n" % ptr2int(BASE))
+        fn = gcval(fntv)['fn'].address    
+        # dump_tvalue(fn)    
+        # out(" frame_func %x\n" % ptr2int(fn))          
+        
         hit = False
+
         global FuncEntryMatchAll
         if FuncEntryMatchAll:
             hit = True
@@ -3571,7 +3683,8 @@ class BCCallBP (gdb.Breakpoint):
 
         out("Entry breakpoint hit at\n")
         dump_tvalue(fntv)
-        pc = gdb.parse_and_eval("$ebx").cast(typ("BCIns*")) - 1
+        pc = gdb.parse_and_eval("$rbx").cast(typ("BCIns*")) 
+        out("locate_pc pc %#x\n" % ptr2int(pc))       
         locate_pc(pc, False)
         RC = gdb.parse_and_eval("$al")
         RC -= 1
@@ -3582,17 +3695,19 @@ class BCCallBP (gdb.Breakpoint):
         else:
             out("Taking %d arguments:\n" % RC)
             for i in xrange(0, RC):
+                out("Taking arguments addr 0x%x :\n"  % BASE[RA + 1 + i].address)                 
                 dump_tvalue(BASE[RA + 1 + i])
 
         return True
+
 
 class BCCallTBP (gdb.Breakpoint):
     def __init__ (self):
         super (BCCallTBP, self).__init__("lj_BC_CALLT")
 
     def stop (self):
-        RA = gdb.parse_and_eval("$ecx")
-        BASE = gdb.parse_and_eval("$edx").cast(typ("TValue*"))
+        RA = gdb.parse_and_eval("$rcx")
+        BASE = gdb.parse_and_eval("$rdx").cast(typ("TValue*"))
         fntv = BASE[RA]
 
         hit = False
@@ -3603,6 +3718,7 @@ class BCCallTBP (gdb.Breakpoint):
         else:
             global FuncEntryTargets
             fn = gcval(fntv)['fn'].address
+            out("BCCallTBP fn  (GCfunc*)%#x\n" % ptr2int(fn))        
             if ptr2int(fn) in FuncEntryTargets:
                 hit = True
 
@@ -3611,7 +3727,7 @@ class BCCallTBP (gdb.Breakpoint):
 
         out("Entry breakpoint hit at\n")
         dump_tvalue(fntv)
-        pc = gdb.parse_and_eval("$ebx").cast(typ("BCIns*")) - 1
+        pc = gdb.parse_and_eval("$rbx").cast(typ("BCIns*")) - 1
         #out("pc = %#x" % ptr2int(pc))
         locate_pc(pc, False)
         RD = gdb.parse_and_eval("$eax")
@@ -3653,10 +3769,10 @@ Usage: lb <spec>"""
                 lineno = int(m.group(2))
 
                 #if FuncEntryMatchAll:
-                    #raise gdb.GdbError("Breakpoint already set on all Lua function entries")
+                    #raise gdb.GdbError("Breakpoint already set on all Lfunction entries")
 
                 out("Searching Lua function at %s:%d...\n" % (fname, lineno))
-                res = find_lfunc_by_src_loc(fname, lineno)
+                res = find_lfunc_by_src_loc(fname, lineno, False)
                 found = False
                 for hit in res:
                     fn = hit[0]
@@ -3665,6 +3781,7 @@ Usage: lb <spec>"""
                         % (ptr2int(fn), path, lineno))
                     FuncEntryTargets[ptr2int(fn)] = spec
                     found = True
+                    # break
 
                 if not found:
                     raise gdb.GdbError("failed to find Lua function matching %s" \
@@ -3814,6 +3931,8 @@ Usage: ldel [spec]"""
 
 ldel()
 
+
+### done
 class linfob(gdb.Command):
     """This command shows all the existing breakpoints on (interpreted) Lua function call entries and returns
 Usage: linfob [spec]"""
@@ -3863,9 +3982,9 @@ class BCRetBP (gdb.Breakpoint):
     ret_count = None
 
     def stop (self):
-        RA = gdb.parse_and_eval("$ecx")
-        BASE = gdb.parse_and_eval("$edx").cast(typ("TValue*"))
-        pc = gdb.parse_and_eval("$ebx").cast(typ("BCIns*")) - 1
+        RA = gdb.parse_and_eval("$rcx")
+        BASE = gdb.parse_and_eval("$rdx").cast(typ("TValue*"))
+        pc = gdb.parse_and_eval("$rbx").cast(typ("BCIns*")) - 1
         #fntv = BASE[RA]
 
         #ins = pc.dereference()
@@ -3938,13 +4057,13 @@ Usage: lrb <spec>"""
             lineno = int(m.group(2))
 
             out("Searching Lua function at %s:%d...\n" % (fname, lineno))
-            res = find_lfunc_by_src_loc(fname, lineno)
+            res = find_lfunc_by_src_loc(fname, lineno, False)
             found = False
             for hit in res:
                 fn = hit[0]
                 path = hit[1]
-                #out("Found function (GCfunc*)%#x at %s:%d\n" \
-                    #% (ptr2int(fn), path, lineno))
+                out("Found function (GCfunc*)%#x at %s:%d\n" \
+                    % (ptr2int(fn), path, lineno))
 
                 # find all RET* bytecode PCs:
                 pt = funcproto(fn)
@@ -3966,6 +4085,7 @@ Usage: lrb <spec>"""
                         out("Set breakpoint on %s (line %s)\n" % (op.strip(), \
                             loc))
                         FuncReturnTargets[ptr2int(pc)] = (spec, loc)
+                        break
 
                 if not found:
                     raise gdb.GdbError("failed to find RET* instructions in " \
@@ -4083,13 +4203,20 @@ Usage: ldumpstack (lua_State *)"""
 
     def invoke (self, args, from_tty):
         argv = gdb.string_to_argv(args)
+        
+        if len(argv) > 1:
+            raise gdb.GdbError("Usage: ldumpstack [L]")
 
-        if len(argv) != 1:
-            raise gdb.GdbError("1 argument expected!\nusage: ltb <lua_State *>")
-
-        L = gdbutils.parse_ptr(argv[0], "lua_State*")
+        if len(argv) == 1:
+            L = gdbutils.parse_ptr(argv[0], "lua_State*")
+            if not L or str(L) == "void":
+                raise gdb.GdbError("L empty")
+        else:
+            L = get_cur_L()
 
         top = lua_gettop(L)
+
+        # out("(lua_State*) top 0x%d\n" % top)
 
         for x in range(top):
             out("index = %d\n" % (x + 1))
